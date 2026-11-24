@@ -1,0 +1,31 @@
+# OPTIONAL: deploys to the VPS every time you push to the main branch.
+# Needs 3 repository secrets (GitHub -> Settings -> Secrets and variables -> Actions):
+#   VPS_HOST  = 157.173.96.166
+#   VPS_USER  = root
+#   VPS_SSH_KEY = the PRIVATE key whose public half is in /root/.ssh/authorized_keys on the VPS
+# See DEPLOY_GITHUB.md. Skip this file if you prefer to deploy by hand (ssh + ./deploy.sh).
+name: Deploy to VPS
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r api/requirements.txt pytest httpx
+      - run: cd api && python -m pytest -q tests
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull and rebuild on the VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: cd /opt/survey && ./deploy.sh

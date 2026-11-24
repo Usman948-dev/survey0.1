@@ -1,0 +1,45 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: survey
+      POSTGRES_USER: survey
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./data/pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U survey"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build: ./api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://survey:${DB_PASSWORD}@db:5432/survey
+      DATA_DIR: /data
+      SECRET_KEY: ${SECRET_KEY}
+      ADMIN_USER: ${ADMIN_USER}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      PURGE_ENABLED: ${PURGE_ENABLED:-false}
+      RETENTION_DAYS: ${RETENTION_DAYS:-183}
+      PERMISSION_REQUIRED: ${PERMISSION_REQUIRED:-true}
+      PERMISSION_OPEN_HOURS: ${PERMISSION_OPEN_HOURS:-2}
+      TIMEZONE: ${TIMEZONE:-Asia/Karachi}
+    volumes:
+      - ./data/files:/data
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [api]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy:/data

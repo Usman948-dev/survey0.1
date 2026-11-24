@@ -1,0 +1,11 @@
+# Replace with your real domain (DNS A record -> VPS IP). Caddy gets the HTTPS certificate by itself.
+{$DOMAIN} {
+	request_body {
+		max_size 80MB
+	}
+	reverse_proxy api:8000 {
+		transport http {
+			response_header_timeout 300s
+		}
+	}
+}

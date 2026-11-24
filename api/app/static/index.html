@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Survey Admin</title>
+<style>
+:root{--bg:#f5f7fa;--card:#fff;--ink:#1d2733;--mut:#64748b;--pri:#0b5fa5;--err:#b42318;--ok:#067647;--line:#e2e8f0}
+@media (prefers-color-scheme:dark){:root{--bg:#10151c;--card:#18202a;--ink:#e6edf5;--mut:#93a1b3;--pri:#5aa9ee;--err:#f97066;--ok:#47cd89;--line:#2a3544}}
+body{margin:0;font:15px system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+header{display:flex;gap:12px;align-items:center;padding:12px 16px;background:var(--card);border-bottom:1px solid var(--line)}
+header h1{font-size:17px;margin:0;flex:1}
+main{max-width:980px;margin:16px auto;padding:0 12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
+h2{font-size:15px;margin:0 0 10px}
+input,select,button{font:inherit;padding:8px 10px;border-radius:7px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+button{background:var(--pri);color:#fff;border:0;cursor:pointer}button.sec{background:var(--bg);color:var(--ink);border:1px solid var(--line)}
+table{border-collapse:collapse;width:100%}td,th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;font-size:14px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}.mut{color:var(--mut)}.err{color:var(--err)}.ok{color:var(--ok)}
+.pill{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:1px 8px;margin:2px;font-size:13px}
+textarea{font:inherit;width:100%;box-sizing:border-box;padding:8px;border-radius:7px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.wide{overflow-x:auto}.wide td,.wide th{white-space:nowrap}
+#login{max-width:340px;margin:12vh auto}#login input{width:100%;box-sizing:border-box;margin-bottom:8px}
+</style></head><body>
+<div id="login" class="card"><h2>Survey Admin</h2>
+<input id="u" placeholder="Username"><input id="p" type="password" placeholder="Password">
+<button onclick="login()" style="width:100%">Sign in</button><p id="lerr" class="err"></p></div>
+<div id="app" hidden>
+<header><h1>Survey Admin</h1><span id="who" class="mut"></span><button class="sec" onclick="logout()">Log out</button></header>
+<main>
+<div class="card"><h2>Progress (done / not done)</h2><div id="summary" class="mut">Loading…</div>
+<div class="row" style="margin-top:10px"><span class="mut">APMS / Single / Three expected list CSV (form_type,list_number):</span>
+<input type="file" id="csv" accept=".csv"><button class="sec" onclick="uploadCsv()">Upload</button><span id="csvmsg"></span></div></div>
+<div class="card"><h2>Project data (PESCO / LESCO)</h2>
+<div class="row"><select id="pj" onchange="loadProject()"><option>pesco</option><option>lesco</option></select>
+<span class="mut">Master sheet (.xlsx or .csv: List Number, Circle, Division, Sub Division, Feeder Name, Feeder Code):</span></div>
+<div class="row"><input type="file" id="mf" accept=".xlsx,.csv"><label class="mut"><input type="checkbox" id="rep" checked> this file is the full list (remove List Numbers that are not in it)</label>
+<button class="sec" onclick="uploadMaster()">Upload</button><span id="mmsg"></span></div>
+<div id="msum" class="mut"></div>
+<h2 style="margin-top:14px">Dropdown options (one per line)</h2>
+<div class="row"><div style="flex:1;min-width:150px"><div class="mut">TF rating = cable width</div><textarea id="o_tf" rows="7"></textarea></div>
+<div style="flex:1;min-width:150px"><div class="mut">Pole type</div><textarea id="o_pole" rows="7"></textarea></div>
+<div style="flex:1;min-width:150px"><div class="mut">Earthing</div><textarea id="o_earth" rows="7"></textarea></div></div>
+<div class="row"><button onclick="saveOptions()">Save options</button><span id="omsg"></span><span class="mut">Phones get changes on their next download of the project list.</span></div></div>
+<div class="card"><h2>View / download data and photos</h2>
+<div class="row"><select id="ft"><option>pesco</option><option>lesco</option><option>apms</option><option>single</option><option>three</option></select>
+<input id="ln" placeholder="List Number"><input id="rn" placeholder="Reference Number (PESCO / LESCO)">
+<button onclick="findForms()">Show data</button></div>
+<div class="row"><span class="mut">Photos:</span><button class="sec" onclick="zip('list')">This List Number</button><button class="sec" onclick="zip('reference')">This Reference Number</button>
+<button class="sec" onclick="bulk('list')">All by List Number</button><button class="sec" onclick="bulk('reference')">All by Reference Number</button></div>
+<div class="row"><span class="mut">Data export (CSV):</span><button class="sec" onclick="csvOut('pesco')">PESCO</button><button class="sec" onclick="csvOut('lesco')">LESCO</button><button class="sec" onclick="csvOut('apms')">APMS</button><button class="sec" onclick="csvOut('single')">Single</button><button class="sec" onclick="csvOut('three')">Three</button></div>
+<div id="forms" class="wide"></div></div>
+<div class="card"><h2>Users</h2>
+<div class="row"><button onclick="givePermAll()">Give permission to all (today)</button><span id="pmsg"></span><span class="mut">Each user must open the app within 2 hours of getting permission, otherwise the account is locked until you give permission again. Permission ends at midnight.</span></div>
+<div class="row"><input id="nu" placeholder="New username"><input id="np" type="password" placeholder="Password (8+)"><select id="nr"><option>user</option><option>admin</option></select><select id="np2"><option value="">no PESCO/LESCO</option><option value="pesco">PESCO</option><option value="lesco">LESCO</option></select><button onclick="addUser()">Add user</button><span id="umsg"></span></div>
+<div id="users"></div></div>
+</main></div>
+<script>
+let T=localStorage.getItem('t')||'';
+const $=id=>document.getElementById(id);
+async function api(path,opt={}){opt.headers=Object.assign({Authorization:'Bearer '+T},opt.headers||{});
+ let r=await fetch('/api/v1'+path,opt);
+ if(r.status==401&&path!='/auth/login'){await refresh();opt.headers.Authorization='Bearer '+T;r=await fetch('/api/v1'+path,opt)}
+ if(!r.ok){let d='';try{d=(await r.json()).detail}catch(e){}throw new Error(d||r.status)}return r}
+async function refresh(){const rt=localStorage.getItem('r');if(!rt){logout();throw new Error('Signed out')}
+ const r=await fetch('/api/v1/auth/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refresh_token:rt})});
+ if(!r.ok){logout();throw new Error('Session expired')}T=(await r.json()).access_token;localStorage.setItem('t',T)}
+async function login(){try{const r=await fetch('/api/v1/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('u').value,password:$('p').value})});
+ const j=await r.json();if(!r.ok)throw new Error(j.detail);if(j.role!='admin')throw new Error('Admins only');
+ T=j.access_token;localStorage.setItem('t',T);localStorage.setItem('r',j.refresh_token);localStorage.setItem('n',j.username);start()}catch(e){$('lerr').textContent=e.message}}
+function logout(){localStorage.clear();T='';$('app').hidden=true;$('login').hidden=false}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+async function start(){$('login').hidden=true;$('app').hidden=false;$('who').textContent=localStorage.getItem('n')||'';
+ try{await Promise.all([loadSummary(),loadUsers(),loadProject()])}catch(e){}}
+async function loadSummary(){const j=await(await api('/admin/summary')).json();let h='<table><tr><th>Type</th><th>Forms</th><th>List Nos done</th><th>Expected</th><th>Done</th><th>Not done</th></tr>';
+ for(const[t,s]of Object.entries(j.types)){h+=`<tr><td>${t}</td><td>${s.forms_received}</td><td>${s.list_numbers_done}</td><td>${s.expected||'-'}</td><td>${s.expected?s.expected_done:'-'}</td><td>${s.expected?s.not_done.length:'-'}</td></tr>`}
+ h+='</table>';for(const[t,s]of Object.entries(j.types)){if(s.not_done.length)h+=`<p><b>${t} not done:</b> `+s.not_done.slice(0,300).map(x=>`<span class="pill">${esc(x)}</span>`).join('')+(s.not_done.length>300?' …':'')+'</p>'}
+ for(const[t,s]of Object.entries(j.types)){if(s.not_in_master_list&&s.not_in_master_list.length)h+=`<p class="err"><b>${t}: List Number not in master list</b> (fix the sheet or the entry): `+s.not_in_master_list.slice(0,100).map(x=>`<span class="pill">${esc(x)}</span>`).join('')+'</p>'}
+ const u=Object.entries(j.last_24h_by_user);h+='<p class="mut">Last 24 h: '+(u.length?u.map(([a,b])=>esc(a)+' '+b).join(' · '):'no uploads')+'</p>';$('summary').innerHTML=h}
+async function uploadCsv(){const f=$('csv').files[0];if(!f)return;const fd=new FormData();fd.append('file',f);
+ try{const j=await(await api('/admin/expected',{method:'POST',body:fd})).json();$('csvmsg').textContent=`added ${j.added}`;$('csvmsg').className='ok';loadSummary()}catch(e){$('csvmsg').textContent=e.message;$('csvmsg').className='err'}}
+async function findForms(){const q=new URLSearchParams({form_type:$('ft').value});if($('ln').value.trim())q.set('list_number',$('ln').value.trim());if($('rn').value.trim())q.set('reference_number',$('rn').value.trim());
+ try{const j=await(await api('/admin/forms/table?'+q)).json();
+ $('forms').innerHTML=j.rows.length?'<table><tr>'+j.columns.map(c=>`<th>${esc(c.label)}</th>`).join('')+'</tr>'+j.rows.map(r=>'<tr'+(r.master_check?' style="background:rgba(180,35,24,.12)"':'')+'>'+j.columns.map(c=>`<td${c.key=='master_check'&&r[c.key]?' class="err"':''}>${esc(c.key=='received_at'?String(r[c.key]).slice(0,16).replace('T',' '):(r[c.key]??''))}</td>`).join('')+'</tr>').join('')+'</table>':'<p class="mut">No forms found.</p>'}catch(e){$('forms').innerHTML='<p class="err">'+esc(e.message)+'</p>'}}
+async function save(url,name){try{const r=await api(url);const b=await r.blob();const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();URL.revokeObjectURL(a.href)}catch(e){alert(e.message)}}
+function zip(by){const ln=$('ln').value.trim(),rn=$('rn').value.trim(),q=new URLSearchParams({form_type:$('ft').value});
+ if(by=='list'){if(!ln)return alert('Type a List Number');q.set('list_number',ln)}else{if(!rn)return alert('Type a Reference Number');q.set('reference_number',rn)}
+ save('/admin/photos.zip?'+q,(by=='list'?ln:rn)+'.zip')}
+function bulk(by){const t=$('ft').value;save('/admin/photos_bulk.zip?form_type='+t+'&by='+by,t+'_photos_by_'+by+'.zip')}
+function csvOut(t){save('/admin/forms.csv?form_type='+t,t+'_forms.csv')}
+async function loadProject(){const p=$('pj').value;try{const m=await(await api('/admin/projects/'+p+'/master')).json();
+ $('msum').textContent=`${m.list_numbers} List Numbers · ${m.circles} circles · ${m.divisions} divisions · ${m.sub_divisions} sub divisions`;
+ const o=await(await api('/admin/projects/'+p+'/options')).json();
+ $('o_tf').value=o.tfRating.map(x=>x.value+' = '+x.cable_width).join('\n');$('o_pole').value=o.poleType.join('\n');$('o_earth').value=o.earthing.join('\n')}catch(e){$('msum').textContent=e.message}}
+async function uploadMaster(){const f=$('mf').files[0];if(!f)return alert('Choose the Excel file first');const fd=new FormData();fd.append('file',f);
+ try{const j=await(await api('/admin/projects/'+$('pj').value+'/master?replace='+$('rep').checked,{method:'POST',body:fd})).json();
+ $('mmsg').textContent=`added ${j.added}, updated ${j.updated}, removed ${j.removed}`;$('mmsg').className='ok';loadProject();loadSummary()}catch(e){$('mmsg').textContent=e.message;$('mmsg').className='err'}}
+function lines(id){return $(id).value.split('\n').map(x=>x.trim()).filter(Boolean)}
+async function saveOptions(){try{const tf=lines('o_tf').map(l=>{const [v,...w]=l.split('=');return{value:v.trim(),cable_width:w.join('=').trim()}});
+ await api('/admin/projects/'+$('pj').value+'/options',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({tfRating:tf,poleType:lines('o_pole'),earthing:lines('o_earth')})});
+ $('omsg').textContent='saved';$('omsg').className='ok';loadProject()}catch(e){$('omsg').textContent=e.message;$('omsg').className='err'}}
+async function loadUsers(){const j=await(await api('/admin/users')).json();$('users').innerHTML='<table><tr><th>User</th><th>Role</th><th>Project</th><th>Permission today</th><th>Forms</th><th>Status</th><th></th></tr>'+j.map(u=>`<tr><td>${esc(u.username)}</td><td>${u.role}</td><td><select onchange="setProject('${esc(u.username)}',this.value)"><option value="">none</option><option value="pesco"${u.project=='pesco'?' selected':''}>PESCO</option><option value="lesco"${u.project=='lesco'?' selected':''}>LESCO</option></select></td><td>${permCell(u.permission)}</td><td>${u.forms}</td><td class="${u.active?'ok':'err'}">${u.active?'active':'disabled'}</td><td><button onclick="givePerm('${esc(u.username)}')">Give permission</button> <button class="sec" onclick="toggle('${esc(u.username)}',${!u.active})">${u.active?'Disable':'Enable'}</button> <button class="sec" onclick="pw('${esc(u.username)}')">Password</button></td></tr>`).join('')+'</table>'}
+function hm(iso){return new Date(iso).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
+function permCell(p){if(!p)return '';switch(p.state){
+ case 'ok':return `<span class="ok">Allowed</span> <span class="mut">(opened ${hm(p.opened_at)})</span>`;
+ case 'waiting':return `<span class="mut">Must open the app by ${hm(p.locks_at)}</span>`;
+ case 'locked':return `<b class="err">LOCKED</b> <span class="mut">(did not open by ${hm(p.locks_at)})</span>`;
+ case 'expired':return '<span class="err">Not given for today</span>';
+ case 'none':return '<span class="err">Not given yet</span>';
+ default:return '<span class="mut">not needed</span>'}}
+async function givePerm(u){try{await api('/admin/users/'+encodeURIComponent(u)+'/permission',{method:'POST'});loadUsers()}catch(e){alert(e.message)}}
+async function givePermAll(){if(!confirm('Give permission for today to every active user? Each must open the app within the time limit.'))return;
+ try{const j=await(await api('/admin/permissions/grant_all',{method:'POST'})).json();$('pmsg').textContent='permission given to '+j.users+' users';$('pmsg').className='ok';loadUsers()}catch(e){$('pmsg').textContent=e.message;$('pmsg').className='err'}}
+async function setProject(u,p){try{await api('/admin/users/'+encodeURIComponent(u)+'/project',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({project:p||null})})}catch(e){alert(e.message);loadUsers()}}
+async function addUser(){try{await api('/admin/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('nu').value,password:$('np').value,role:$('nr').value,project:$('np2').value||null})});$('umsg').textContent='added';$('umsg').className='ok';$('nu').value=$('np').value='';loadUsers()}catch(e){$('umsg').textContent=e.message;$('umsg').className='err'}}
+async function toggle(u,a){try{await api('/admin/users/'+encodeURIComponent(u)+'/active',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active:a})});loadUsers()}catch(e){alert(e.message)}}
+async function pw(u){const p=prompt('New password for '+u+' (8+ characters)');if(!p)return;try{await api('/admin/users/'+encodeURIComponent(u)+'/password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:p})});alert('Password changed')}catch(e){alert(e.message)}}
+if(T)start();
+</script></body></html>
