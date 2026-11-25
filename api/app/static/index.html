@@ -30,7 +30,8 @@ textarea{font:inherit;width:100%;box-sizing:border-box;padding:8px;border-radius
 <input type="file" id="csv" accept=".csv"><button class="sec" onclick="uploadCsv()">Upload</button><span id="csvmsg"></span></div></div>
 <div class="card"><h2>Project data (PESCO / LESCO)</h2>
 <div class="row"><select id="pj" onchange="loadProject()"><option>pesco</option><option>lesco</option></select>
-<span class="mut">Master sheet (.xlsx or .csv: List Number, Circle, Division, Sub Division, Feeder Name, Feeder Code):</span></div>
+<span class="mut">Master sheet (.xlsx or .csv: List Number, Sub Division, Feeder, Location, TRF Code, Capacity(KVA), Reference No.):</span></div>
+<div class="row"><input id="mc" placeholder="Circle (whole file)"><input id="md" placeholder="Division (whole file)"><span class="mut">only needed when the file has no Circle / Division column</span></div>
 <div class="row"><input type="file" id="mf" accept=".xlsx,.csv"><label class="mut"><input type="checkbox" id="rep" checked> this file is the full list (remove List Numbers that are not in it)</label>
 <button class="sec" onclick="uploadMaster()">Upload</button><span id="mmsg"></span></div>
 <div id="msum" class="mut"></div>
@@ -90,7 +91,7 @@ async function loadProject(){const p=$('pj').value;try{const m=await(await api('
  const o=await(await api('/admin/projects/'+p+'/options')).json();
  $('o_tf').value=o.tfRating.map(x=>x.value+' = '+x.cable_width).join('\n');$('o_pole').value=o.poleType.join('\n');$('o_earth').value=o.earthing.join('\n')}catch(e){$('msum').textContent=e.message}}
 async function uploadMaster(){const f=$('mf').files[0];if(!f)return alert('Choose the Excel file first');const fd=new FormData();fd.append('file',f);
- try{const j=await(await api('/admin/projects/'+$('pj').value+'/master?replace='+$('rep').checked,{method:'POST',body:fd})).json();
+ try{const j=await(await api('/admin/projects/'+$('pj').value+'/master?replace='+$('rep').checked+'&circle='+encodeURIComponent($('mc').value.trim())+'&division='+encodeURIComponent($('md').value.trim()),{method:'POST',body:fd})).json();
  $('mmsg').textContent=`added ${j.added}, updated ${j.updated}, removed ${j.removed}`;$('mmsg').className='ok';loadProject();loadSummary()}catch(e){$('mmsg').textContent=e.message;$('mmsg').className='err'}}
 function lines(id){return $(id).value.split('\n').map(x=>x.trim()).filter(Boolean)}
 async function saveOptions(){try{const tf=lines('o_tf').map(l=>{const [v,...w]=l.split('=');return{value:v.trim(),cable_width:w.join('=').trim()}});
