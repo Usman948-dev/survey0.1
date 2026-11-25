@@ -86,11 +86,23 @@ def write_options(db: Session, project: str, body: dict) -> dict:
 
 # ------------------------------------------------------------ master sheet
 
+# Header names are matched ignoring case, spaces and punctuation, so "Capacity(KVA)",
+# "capacity kva" and "CAPACITY_KVA" are the same column.
 _HEADERS = {
     "listnumber": "list_number", "circle": "circle", "division": "division",
-    "subdivision": "sub_division", "feedername": "feeder_name", "feedercode": "feeder_code",
+    "subdivision": "sub_division",
+    "feeder": "feeder_code", "feedercode": "feeder_code", "feedername": "feeder_name",
+    "location": "location", "trfcode": "trf_code",
+    "capacitykva": "capacity_kva", "capacity": "capacity_kva",
+    "referenceno": "reference_no", "referencenumber": "reference_no", "refno": "reference_no",
 }
-_REQUIRED = ("list_number", "circle", "division", "sub_division")
+# Compulsory in the file / on every row. Circle and Division are compulsory too, but may come
+# from the upload form instead of a column (see parse_master). Everything else is optional.
+_REQUIRED = ("list_number", "sub_division")
+_OPTIONAL = ("feeder_name", "feeder_code", "location", "trf_code", "capacity_kva", "reference_no")
+_MAX_LEN = {"list_number": 64, "circle": 120, "division": 120, "sub_division": 120,
+            "feeder_name": 160, "feeder_code": 80, "location": 255, "trf_code": 80,
+            "capacity_kva": 40, "reference_no": 80}
 
 
 def _cell(v) -> str:
@@ -116,29 +128,42 @@ def _sheet_rows(data: bytes, filename: str):
     raise HTTPException(422, "Upload an .xlsx or .csv file")
 
 
-def parse_master(data: bytes, filename: str) -> list[dict]:
-    """Header row: List Number, Circle, Division, Sub Division, Feeder Name, Feeder Code."""
+def parse_master(data: bytes, filename: str, circle: str = "", division: str = "") -> list[dict]:
+    """Header row (any order): List Number, Sub Division, Feeder, Location, TRF Code,
+    Capacity(KVA), Reference No. -- plus Circle and Division unless [circle] / [division]
+    are given (they fill every row where the file has no value).
+
+    Compulsory on every row: List Number, Sub Division, Circle, Division.
+    Optional: Feeder (code), Feeder Name, Location, TRF Code, Capacity(KVA), Reference No."""
+    circle, division = (circle or "").strip(), (division or "").strip()
     raw = _sheet_rows(data, filename)
     if not raw:
         raise HTTPException(422, "The file is empty")
     cols: dict[int, str] = {}
     for i, h in enumerate(raw[0]):
         key = _HEADERS.get(re.sub(r"[^a-z]", "", _cell(h).lower()))
-        if key:
+        if key and key not in cols.values():
             cols[i] = key
-    missing = [k for k in _REQUIRED if k not in cols.values()]
+    required = list(_REQUIRED) + [k for k, d in (("circle", circle), ("division", division)) if not d]
+    missing = [k for k in required if k not in cols.values()]
     if missing:
         raise HTTPException(422, "Missing column(s): " + ", ".join(m.replace("_", " ") for m in missing))
+    defaults = {"circle": circle, "division": division}
     rows, seen = [], {}
     for n, r in enumerate(raw[1:], start=2):
         rec = {k: _cell(r[i]) if i < len(r) else "" for i, k in cols.items()}
         if not any(rec.values()):
             continue  # blank line
-        for k in _REQUIRED:
+        for k, d in defaults.items():
+            rec[k] = rec.get(k) or d
+        for k in _OPTIONAL:
+            rec.setdefault(k, "")
+        for k in ("list_number", "sub_division", "circle", "division"):
             if not rec.get(k):
                 raise HTTPException(422, f"Row {n}: {k.replace('_', ' ')} is empty")
-        rec.setdefault("feeder_name", "")
-        rec.setdefault("feeder_code", "")
+        for k, v in rec.items():
+            if len(v) > _MAX_LEN[k]:
+                raise HTTPException(422, f"Row {n}: {k.replace('_', ' ')} is longer than {_MAX_LEN[k]} characters")
         if rec["list_number"] in seen:
             raise HTTPException(422, f"Row {n}: List Number {rec['list_number']} is already on row {seen[rec['list_number']]}")
         seen[rec["list_number"]] = n
