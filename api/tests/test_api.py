@@ -191,6 +191,49 @@ def test_master_import_and_summary(c):
     assert s == {"list_numbers": 3, "circles": 2, "divisions": 2, "sub_divisions": 3}
 
 
+def test_master_import_your_excel_layout(c):
+    """The PESCO sheet: no Circle / Division columns (given on upload), Excel numbers, spaces."""
+    from openpyxl import Workbook
+    wb = Workbook(); ws = wb.active
+    ws.append(["List Number", "Sub Division", "Feeder", "Location", "TRF Code", "Capacity(KVA)", "Reference No."])
+    ws.append([1, 26126, 87614, "FOUJI GUJAR ABAD PESHAWAR (L2600024892)", "L2600024892", 100, 14261269000160])
+    ws.append([2, 26126, 87614, "M.IQBAL MARKET (L2600024915)", "L2600024915", 100, " 7261269000250"])
+    ws.append([3, 26126, None, None, None, None, None])  # only the compulsory columns
+    buf = io.BytesIO(); wb.save(buf)
+    admin = hdr(c, "admin", "adminpass1")
+    url = "/api/v1/admin/projects/pesco/master"
+    f = {"file": ("m.xlsx", buf.getvalue(), XLSX)}
+    r = c.post(url, headers=admin, files=f)  # no circle / division anywhere
+    assert r.status_code == 422 and "circle" in r.json()["detail"].lower()
+    r = c.post(url + "?circle=Peshawar&division=Peshawar%20Div", headers=admin, files=f)
+    assert r.status_code == 200 and r.json()["added"] == 3, r.text
+    h = make_user(c, "ex_user", "pesco")
+    items = {i["list_number"]: i for i in c.get("/api/v1/projects/pesco/master", headers=h).json()["items"]}
+    one = items["1"]
+    assert one["sub_division"] == "26126" and one["feeder_code"] == "87614" and one["circle"] == "Peshawar"
+    assert one["trf_code"] == "L2600024892" and one["capacity_kva"] == "100"
+    assert one["reference_no"] == "14261269000160" and one["location"].startswith("FOUJI")
+    assert items["2"]["reference_no"] == "7261269000250"
+    assert items["3"]["location"] == "" and items["3"]["reference_no"] == ""
+    put_master(c, replace=True)  # leave the shared test database as other tests expect it
+
+
+def test_master_import_optional_columns_and_limits(c):
+    admin = hdr(c, "admin", "adminpass1")
+    csv_ok = b"List Number,Sub Division,Circle,Division\n1,S,C,D\n"
+    r = c.post("/api/v1/admin/projects/pesco/master", headers=admin, files={"file": ("m.csv", csv_ok, "text/csv")})
+    assert r.status_code == 200, r.text
+    no_sub = b"List Number,Circle,Division\n1,C,D\n"
+    r = c.post("/api/v1/admin/projects/pesco/master?circle=C&division=D", headers=admin,
+               files={"file": ("m.csv", no_sub, "text/csv")})
+    assert r.status_code == 422 and "sub division" in r.json()["detail"].lower()
+    long_ref = ("List Number,Sub Division,Reference No.\n1,S," + "9" * 81 + "\n").encode()
+    r = c.post("/api/v1/admin/projects/pesco/master?circle=C&division=D", headers=admin,
+               files={"file": ("m.csv", long_ref, "text/csv")})
+    assert r.status_code == 422 and "Row 2" in r.json()["detail"]
+    put_master(c, replace=True)
+
+
 def test_master_import_rejects_bad_files(c):
     admin = hdr(c, "admin", "adminpass1")
     r = put_master(c, header=("List Number", "Circle", "Division"))
