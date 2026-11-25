@@ -65,6 +65,10 @@ class MasterRow(Base):
     sub_division: Mapped[str] = mapped_column(String(120))
     feeder_name: Mapped[str] = mapped_column(String(160), default="")
     feeder_code: Mapped[str] = mapped_column(String(80), default="")
+    location: Mapped[str] = mapped_column(String(255), default="")
+    trf_code: Mapped[str] = mapped_column(String(80), default="")
+    capacity_kva: Mapped[str] = mapped_column(String(40), default="")
+    reference_no: Mapped[str] = mapped_column(String(80), default="")
 
 
 class ProjectOption(Base):
