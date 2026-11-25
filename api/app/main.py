@@ -41,6 +41,12 @@ def bootstrap():
         if col not in have:
             with engine.begin() as conn:
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN {col} {ddl}"))
+    have = {c["name"] for c in inspect(engine).get_columns("master_rows")}
+    for col, ddl in (("location", "VARCHAR(255)"), ("trf_code", "VARCHAR(80)"),
+                     ("capacity_kva", "VARCHAR(40)"), ("reference_no", "VARCHAR(80)")):
+        if col not in have:
+            with engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE master_rows ADD COLUMN {col} {ddl} NOT NULL DEFAULT ''"))
     os.makedirs(storage.photos_root(), exist_ok=True)
     with SessionLocal() as db:
         projects.seed_options(db)
@@ -222,6 +228,8 @@ def project_master(project: str, _: User = Depends(project_user), db: Session = 
         "items": [
             {"list_number": r.list_number, "circle": r.circle, "division": r.division,
              "sub_division": r.sub_division, "feeder_name": r.feeder_name, "feeder_code": r.feeder_code,
+             "location": r.location, "trf_code": r.trf_code, "capacity_kva": r.capacity_kva,
+             "reference_no": r.reference_no,
              "surveyed": surveyed.get(r.list_number, 0)}
             for r in rows
         ],
@@ -526,13 +534,15 @@ def photos_bulk(form_type: str, background: BackgroundTasks, by: str = "list",
 
 @app.post("/api/v1/admin/projects/{project}/master")
 async def upload_master(project: str, file: UploadFile = File(...), replace: bool = False,
+                        circle: str = "", division: str = "",
                         _: User = Depends(admin_user), db: Session = Depends(get_db)):
-    """Excel (.xlsx) or CSV with the header: List Number, Circle, Division, Sub Division,
-    Feeder Name, Feeder Code. New List Numbers are added, existing ones updated. With
+    """Excel (.xlsx) or CSV with the header: List Number, Sub Division, Feeder, Location,
+    TRF Code, Capacity(KVA), Reference No. (Circle and Division as columns, or as the
+    circle= / division= query values for the whole file). New List Numbers are added, existing ones updated. With
     replace=true List Numbers missing from the file are removed (surveys already received stay)."""
     if project not in config.PROJECTS:
         raise HTTPException(404, "No such project")
-    rows = projects.parse_master(await file.read(), file.filename or "")
+    rows = projects.parse_master(await file.read(), file.filename or "", circle, division)
     existing = {m.list_number: m for m in db.query(MasterRow).filter(MasterRow.project == project)}
     added = updated = 0
     for r in rows:
