@@ -17,6 +17,11 @@ GENERAL_TYPES = ("apms", "single", "three")
 # and its own survey form. A user may be limited to one of them (users.project).
 PROJECTS = ("pesco", "lesco")
 FORM_TYPES = GENERAL_TYPES + PROJECTS
+# Projects whose master sheet has NO List Number: each row is identified by its TRF Code, and the
+# surveyor picks a TRF Code. Internally the TRF Code is stored in the same "list_number" key
+# (master_rows.list_number, forms.list_number, photo folders), so done / not-done, photo zips and
+# filters work unchanged. LESCO still uses List Numbers.
+TRF_PROJECTS = tuple(x for x in os.getenv("TRF_PROJECTS", "pesco").lower().replace(" ", "").split(",") if x in PROJECTS)
 
 # Daily permission: the admin gives every surveyor permission for the day (Admin page ->
 # "Give permission"). The user must open the app within PERMISSION_OPEN_HOURS of that, otherwise
