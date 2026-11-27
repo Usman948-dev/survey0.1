@@ -11,6 +11,7 @@ _tmp = tempfile.mkdtemp()
 os.environ.update(
     DATABASE_URL=f"sqlite:///{_tmp}/t.db", DATA_DIR=_tmp + "/data",
     SECRET_KEY="x" * 40, ADMIN_USER="admin", ADMIN_PASSWORD="adminpass1",
+    TRF_PROJECTS="",  # these tests cover the List Number path; test_trf.py covers TRF-keyed PESCO
 )
 
 from fastapi.testclient import TestClient  # noqa: E402
@@ -188,7 +189,7 @@ def test_master_import_and_summary(c):
     again = put_master(c).json()  # Excel numbers (1001.0) must not create new rows
     assert again["added"] == 0 and again["updated"] == 0
     s = c.get("/api/v1/admin/projects/pesco/master", headers=hdr(c, "admin", "adminpass1")).json()
-    assert s == {"list_numbers": 3, "circles": 2, "divisions": 2, "sub_divisions": 3}
+    assert s == {"list_numbers": 3, "key": "list_number", "circles": 2, "divisions": 2, "sub_divisions": 3}
 
 
 def test_master_import_your_excel_layout(c):
