@@ -170,6 +170,13 @@ async def upload_form(
         raise HTTPException(422, "Bad meta")
     if user.role != "admin" and form_type in config.PROJECTS and user.project != form_type:
         raise HTTPException(403, "No access to this project")
+    if form_type in config.TRF_PROJECTS:
+        # no List Number here: the form is identified by the TRF Code the surveyor picked
+        list_number = str(m.get("trf_code") or data.get("trfCode") or list_number).strip()
+        if not list_number:
+            raise HTTPException(422, "TRF Code is required")
+        data["trfCode"] = list_number
+        data.pop("listNumber", None)
     if created_at.tzinfo is None:
         created_at = created_at.astimezone()  # phone local time
     if len(photos) > config.MAX_PHOTOS_PER_FORM:
@@ -211,6 +218,16 @@ def _natural(s: str):
     return (len(s), s)
 
 
+def _master_item(r: MasterRow, surveyed: int, project: str) -> dict:
+    item = {"circle": r.circle, "division": r.division, "sub_division": r.sub_division,
+            "feeder_name": r.feeder_name, "feeder_code": r.feeder_code, "location": r.location,
+            "trf_code": r.trf_code, "capacity_kva": r.capacity_kva, "reference_no": r.reference_no,
+            "surveyed": surveyed}
+    if project not in config.TRF_PROJECTS:  # PESCO has no List Number
+        item = {"list_number": r.list_number, **item}
+    return item
+
+
 @app.get("/api/v1/projects/{project}/master")
 def project_master(project: str, _: User = Depends(project_user), db: Session = Depends(get_db)):
     """Everything the phone needs for the PESCO / LESCO form, in one download:
@@ -221,18 +238,12 @@ def project_master(project: str, _: User = Depends(project_user), db: Session = 
         .group_by(Form.list_number).all()
     )
     rows = db.query(MasterRow).filter(MasterRow.project == project).all()
-    rows.sort(key=lambda r: _natural(r.list_number))
+    rows.sort(key=lambda r: (r.sub_division, _natural(r.list_number)))
     return {
         "project": project,
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "items": [
-            {"list_number": r.list_number, "circle": r.circle, "division": r.division,
-             "sub_division": r.sub_division, "feeder_name": r.feeder_name, "feeder_code": r.feeder_code,
-             "location": r.location, "trf_code": r.trf_code, "capacity_kva": r.capacity_kva,
-             "reference_no": r.reference_no,
-             "surveyed": surveyed.get(r.list_number, 0)}
-            for r in rows
-        ],
+        "key": "trf_code" if project in config.TRF_PROJECTS else "list_number",
+        "items": [_master_item(r, surveyed.get(r.list_number, 0), project) for r in rows],
         "options": projects.read_options(db, project),
     }
 
@@ -536,13 +547,14 @@ def photos_bulk(form_type: str, background: BackgroundTasks, by: str = "list",
 async def upload_master(project: str, file: UploadFile = File(...), replace: bool = False,
                         circle: str = "", division: str = "",
                         _: User = Depends(admin_user), db: Session = Depends(get_db)):
-    """Excel (.xlsx) or CSV with the header: List Number, Sub Division, Feeder, Location,
-    TRF Code, Capacity(KVA), Reference No. (Circle and Division as columns, or as the
+    """Excel (.xlsx) or CSV with the header: [List Number,] Sub Division, Feeder, Location,
+    TRF Code, Capacity(KVA), Reference No. PESCO rows are keyed by TRF Code (List Number is not
+    needed); LESCO rows by List Number. (Circle and Division as columns, or as the
     circle= / division= query values for the whole file). New List Numbers are added, existing ones updated. With
     replace=true List Numbers missing from the file are removed (surveys already received stay)."""
     if project not in config.PROJECTS:
         raise HTTPException(404, "No such project")
-    rows = projects.parse_master(await file.read(), file.filename or "", circle, division)
+    rows = projects.parse_master(await file.read(), file.filename or "", circle, division, project)
     existing = {m.list_number: m for m in db.query(MasterRow).filter(MasterRow.project == project)}
     added = updated = 0
     for r in rows:
@@ -573,6 +585,7 @@ def master_summary(project: str, _: User = Depends(admin_user), db: Session = De
     rows = db.query(MasterRow).filter(MasterRow.project == project).all()
     return {
         "list_numbers": len(rows),
+        "key": "trf_code" if project in config.TRF_PROJECTS else "list_number",
         "circles": len({r.circle for r in rows}),
         "divisions": len({(r.circle, r.division) for r in rows}),
         "sub_divisions": len({(r.circle, r.division, r.sub_division) for r in rows}),
