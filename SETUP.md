@@ -36,7 +36,7 @@ Open `/admin/` on the same address, sign in with `ADMIN_USER` / `ADMIN_PASSWORD`
   project (PESCO / LESCO / none). A user with a project can read and send only that project's data;
   you can change it later in the Users table.
 - **Project data (PESCO / LESCO):** pick the project, upload the Excel sheet (.xlsx or .csv with the
-  header `List Number, Sub Division, Feeder, Location, TRF Code, Capacity(KVA), Reference No.`; type the Circle and Division of the file in the two boxes, or add `Circle` / `Division` columns instead. Only List Number, Sub Division, Circle and Division are compulsory, the rest may be empty). Upload again any
+  header `Sub Division, Feeder, Location, TRF Code, Capacity(KVA), Reference No.` (**PESCO is keyed by TRF Code, no List Number needed**; LESCO still needs `List Number`); type the Circle and Division of the file in the two boxes, or add `Circle` / `Division` columns instead. Only List Number, Sub Division, Circle and Division are compulsory, the rest may be empty). Upload again any
   time to add or update rows (tick "remove List Numbers that are not in the file" to delete the
   others). Below it, edit the dropdown lists (TF rating = cable width, pole type, earthing); phones
   pick up changes the next time they download the project list.
