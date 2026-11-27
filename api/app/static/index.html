@@ -30,9 +30,9 @@ textarea{font:inherit;width:100%;box-sizing:border-box;padding:8px;border-radius
 <input type="file" id="csv" accept=".csv"><button class="sec" onclick="uploadCsv()">Upload</button><span id="csvmsg"></span></div></div>
 <div class="card"><h2>Project data (PESCO / LESCO)</h2>
 <div class="row"><select id="pj" onchange="loadProject()"><option>pesco</option><option>lesco</option></select>
-<span class="mut">Master sheet (.xlsx or .csv: List Number, Sub Division, Feeder, Location, TRF Code, Capacity(KVA), Reference No.):</span></div>
+<span class="mut" id="mhelp"></span></div>
 <div class="row"><input id="mc" placeholder="Circle (whole file)"><input id="md" placeholder="Division (whole file)"><span class="mut">only needed when the file has no Circle / Division column</span></div>
-<div class="row"><input type="file" id="mf" accept=".xlsx,.csv"><label class="mut"><input type="checkbox" id="rep" checked> this file is the full list (remove List Numbers that are not in it)</label>
+<div class="row"><input type="file" id="mf" accept=".xlsx,.csv"><label class="mut"><input type="checkbox" id="rep" checked> this file is the full list (remove <span id="keyname">TRF Codes</span> that are not in it)</label>
 <button class="sec" onclick="uploadMaster()">Upload</button><span id="mmsg"></span></div>
 <div id="msum" class="mut"></div>
 <h2 style="margin-top:14px">Dropdown options (one per line)</h2>
@@ -42,10 +42,10 @@ textarea{font:inherit;width:100%;box-sizing:border-box;padding:8px;border-radius
 <div class="row"><button onclick="saveOptions()">Save options</button><span id="omsg"></span><span class="mut">Phones get changes on their next download of the project list.</span></div></div>
 <div class="card"><h2>View / download data and photos</h2>
 <div class="row"><select id="ft"><option>pesco</option><option>lesco</option><option>apms</option><option>single</option><option>three</option></select>
-<input id="ln" placeholder="List Number"><input id="rn" placeholder="Reference Number (PESCO / LESCO)">
+<input id="ln" placeholder="TRF Code (PESCO) / List Number"><input id="rn" placeholder="Reference Number (PESCO / LESCO)">
 <button onclick="findForms()">Show data</button></div>
-<div class="row"><span class="mut">Photos:</span><button class="sec" onclick="zip('list')">This List Number</button><button class="sec" onclick="zip('reference')">This Reference Number</button>
-<button class="sec" onclick="bulk('list')">All by List Number</button><button class="sec" onclick="bulk('reference')">All by Reference Number</button></div>
+<div class="row"><span class="mut">Photos:</span><button class="sec" onclick="zip('list')">This TRF Code / List No.</button><button class="sec" onclick="zip('reference')">This Reference Number</button>
+<button class="sec" onclick="bulk('list')">All by TRF Code / List No.</button><button class="sec" onclick="bulk('reference')">All by Reference Number</button></div>
 <div class="row"><span class="mut">Data export (CSV):</span><button class="sec" onclick="csvOut('pesco')">PESCO</button><button class="sec" onclick="csvOut('lesco')">LESCO</button><button class="sec" onclick="csvOut('apms')">APMS</button><button class="sec" onclick="csvOut('single')">Single</button><button class="sec" onclick="csvOut('three')">Three</button></div>
 <div id="forms" class="wide"></div></div>
 <div class="card"><h2>Users</h2>
@@ -70,10 +70,10 @@ function logout(){localStorage.clear();T='';$('app').hidden=true;$('login').hidd
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 async function start(){$('login').hidden=true;$('app').hidden=false;$('who').textContent=localStorage.getItem('n')||'';
  try{await Promise.all([loadSummary(),loadUsers(),loadProject()])}catch(e){}}
-async function loadSummary(){const j=await(await api('/admin/summary')).json();let h='<table><tr><th>Type</th><th>Forms</th><th>List Nos done</th><th>Expected</th><th>Done</th><th>Not done</th></tr>';
+async function loadSummary(){const j=await(await api('/admin/summary')).json();let h='<table><tr><th>Type</th><th>Forms</th><th>TRF / List Nos done</th><th>Expected</th><th>Done</th><th>Not done</th></tr>';
  for(const[t,s]of Object.entries(j.types)){h+=`<tr><td>${t}</td><td>${s.forms_received}</td><td>${s.list_numbers_done}</td><td>${s.expected||'-'}</td><td>${s.expected?s.expected_done:'-'}</td><td>${s.expected?s.not_done.length:'-'}</td></tr>`}
  h+='</table>';for(const[t,s]of Object.entries(j.types)){if(s.not_done.length)h+=`<p><b>${t} not done:</b> `+s.not_done.slice(0,300).map(x=>`<span class="pill">${esc(x)}</span>`).join('')+(s.not_done.length>300?' …':'')+'</p>'}
- for(const[t,s]of Object.entries(j.types)){if(s.not_in_master_list&&s.not_in_master_list.length)h+=`<p class="err"><b>${t}: List Number not in master list</b> (fix the sheet or the entry): `+s.not_in_master_list.slice(0,100).map(x=>`<span class="pill">${esc(x)}</span>`).join('')+'</p>'}
+ for(const[t,s]of Object.entries(j.types)){if(s.not_in_master_list&&s.not_in_master_list.length)h+=`<p class="err"><b>${t}: ${t=='pesco'?'TRF Code':'List Number'} not in master list</b> (fix the sheet or the entry): `+s.not_in_master_list.slice(0,100).map(x=>`<span class="pill">${esc(x)}</span>`).join('')+'</p>'}
  const u=Object.entries(j.last_24h_by_user);h+='<p class="mut">Last 24 h: '+(u.length?u.map(([a,b])=>esc(a)+' '+b).join(' · '):'no uploads')+'</p>';$('summary').innerHTML=h}
 async function uploadCsv(){const f=$('csv').files[0];if(!f)return;const fd=new FormData();fd.append('file',f);
  try{const j=await(await api('/admin/expected',{method:'POST',body:fd})).json();$('csvmsg').textContent=`added ${j.added}`;$('csvmsg').className='ok';loadSummary()}catch(e){$('csvmsg').textContent=e.message;$('csvmsg').className='err'}}
@@ -82,12 +82,13 @@ async function findForms(){const q=new URLSearchParams({form_type:$('ft').value}
  $('forms').innerHTML=j.rows.length?'<table><tr>'+j.columns.map(c=>`<th>${esc(c.label)}</th>`).join('')+'</tr>'+j.rows.map(r=>'<tr'+(r.master_check?' style="background:rgba(180,35,24,.12)"':'')+'>'+j.columns.map(c=>`<td${c.key=='master_check'&&r[c.key]?' class="err"':''}>${esc(c.key=='received_at'?String(r[c.key]).slice(0,16).replace('T',' '):(r[c.key]??''))}</td>`).join('')+'</tr>').join('')+'</table>':'<p class="mut">No forms found.</p>'}catch(e){$('forms').innerHTML='<p class="err">'+esc(e.message)+'</p>'}}
 async function save(url,name){try{const r=await api(url);const b=await r.blob();const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();URL.revokeObjectURL(a.href)}catch(e){alert(e.message)}}
 function zip(by){const ln=$('ln').value.trim(),rn=$('rn').value.trim(),q=new URLSearchParams({form_type:$('ft').value});
- if(by=='list'){if(!ln)return alert('Type a List Number');q.set('list_number',ln)}else{if(!rn)return alert('Type a Reference Number');q.set('reference_number',rn)}
+ if(by=='list'){if(!ln)return alert('Type a TRF Code (PESCO) or List Number');q.set('list_number',ln)}else{if(!rn)return alert('Type a Reference Number');q.set('reference_number',rn)}
  save('/admin/photos.zip?'+q,(by=='list'?ln:rn)+'.zip')}
 function bulk(by){const t=$('ft').value;save('/admin/photos_bulk.zip?form_type='+t+'&by='+by,t+'_photos_by_'+by+'.zip')}
 function csvOut(t){save('/admin/forms.csv?form_type='+t,t+'_forms.csv')}
-async function loadProject(){const p=$('pj').value;try{const m=await(await api('/admin/projects/'+p+'/master')).json();
- $('msum').textContent=`${m.list_numbers} List Numbers · ${m.circles} circles · ${m.divisions} divisions · ${m.sub_divisions} sub divisions`;
+function masterHelp(p){const trf=p=='pesco';$('mhelp').textContent=trf?'Master sheet (.xlsx or .csv): TRF Code and Sub Division are compulsory; also Feeder, Location, Capacity(KVA), Reference No. A List Number column is ignored.':'Master sheet (.xlsx or .csv: List Number, Sub Division, Feeder, Location, TRF Code, Capacity(KVA), Reference No.):';$('keyname').textContent=trf?'TRF Codes':'List Numbers'}
+async function loadProject(){const p=$('pj').value;masterHelp(p);try{const m=await(await api('/admin/projects/'+p+'/master')).json();
+ $('msum').textContent=`${m.list_numbers} ${m.key=='trf_code'?'TRF Codes':'List Numbers'} · ${m.circles} circles · ${m.divisions} divisions · ${m.sub_divisions} sub divisions`;
  const o=await(await api('/admin/projects/'+p+'/options')).json();
  $('o_tf').value=o.tfRating.map(x=>x.value+' = '+x.cable_width).join('\n');$('o_pole').value=o.poleType.join('\n');$('o_earth').value=o.earthing.join('\n')}catch(e){$('msum').textContent=e.message}}
 async function uploadMaster(){const f=$('mf').files[0];if(!f)return alert('Choose the Excel file first');const fd=new FormData();fd.append('file',f);
